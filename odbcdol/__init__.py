@@ -93,7 +93,7 @@ class SQLServerPersister(MutableMapping):
 
     def __setitem__(self, k, v):
         _sanitized_values = [
-            str(val) if isinstance(val, int) else "'{}'".format(val)
+            str(val) if isinstance(val, int) else f"'{val}'"
             for val in v.values()
         ]
         try:
@@ -117,8 +117,7 @@ class SQLServerPersister(MutableMapping):
         self._cursor.execute(self._select_all_query)
         records = self._cursor.fetchall()
 
-        for record in records:
-            yield record
+        yield from records
 
     def __len__(self):
         self._cursor.execute(self._select_all_query)
