@@ -56,18 +56,16 @@ class SQLServerPersister(MutableMapping):
 
     @staticmethod
     def __check_dependencies():
-        import pkg_resources
-
-        installed_packages = [pkg.project_name for pkg in pkg_resources.working_set]
-        if "pyodbc" not in installed_packages:
+        """Check for required dependencies: pyodbc and (on Ubuntu) msodbcsql17 driver.
+        Raises informative errors if missing.
+        """
+        try:
+            import pyodbc  # noqa: F401
+        except ImportError:
             raise ModuleNotFoundError(
                 "'SQLServerPersister' depends on the module 'pyodbc' which is not installed. "
                 "Try installing dependency using 'pip install pyodbc'."
             )
-
-        # import pyodbc globally
-        global pyodbc
-        import pyodbc
 
         if "ubuntu" in platform.platform().lower():
             result = subprocess.Popen(
