@@ -1,25 +1,29 @@
 """
 odbc (through pyodbc) with a simple (dict-like or list-like) interface
 """
+
 import platform
 import subprocess
 from collections.abc import MutableMapping
 
-import pyodbc
+# Check system requirements and import pyodbc with helpful error messages
+from odbcdol.check_requirements import check_pyodbc_import
+
+pyodbc = check_pyodbc_import()
 
 
 class SQLServerPersister(MutableMapping):
     def __init__(
-            self,
-            conn_protocol="tcp",
-            host="localhost",
-            port="1433",
-            db_username="SA",
-            db_pass="Admin123x",
-            db_name="py2store",
-            table_name="person",
-            primary_key="id",
-            data_fields=("name",),
+        self,
+        conn_protocol="tcp",
+        host="localhost",
+        port="1433",
+        db_username="SA",
+        db_pass="Admin123x",
+        db_name="py2store",
+        table_name="person",
+        primary_key="id",
+        data_fields=("name",),
     ):
 
         self.__check_dependencies()
@@ -28,23 +32,23 @@ class SQLServerPersister(MutableMapping):
             "SERVER={}:{},{};"
             "DATABASE={};"
             "UID={};"
-            "PWD={}".format(
-                conn_protocol, host, port, db_name, db_username, db_pass
-            )
+            "PWD={}".format(conn_protocol, host, port, db_name, db_username, db_pass)
         )
 
         self._cursor = self._sql_server_client.cursor()
         self._table_name = table_name
         self._primary_key = primary_key
 
-        self._select_all_query = "SELECT * from {table};".format(
-            table=self._table_name
+        self._select_all_query = "SELECT * from {table};".format(table=self._table_name)
+        self._insert_query = (
+            "INSERT into {table}({{attributes}}) VALUES ({{values}});".format(
+                table=self._table_name
+            )
         )
-        self._insert_query = "INSERT into {table}({{attributes}}) VALUES ({{values}});".format(
-            table=self._table_name
-        )
-        self._select_query = "SELECT * from {table} where {primary_key}='{{value}}'".format(
-            table=self._table_name, primary_key=self._primary_key
+        self._select_query = (
+            "SELECT * from {table} where {primary_key}='{{value}}'".format(
+                table=self._table_name, primary_key=self._primary_key
+            )
         )
         self._del_query = "DELETE from {table} where {primary_key} = {{value}};".format(
             table=self._table_name, primary_key=self._primary_key
@@ -54,9 +58,7 @@ class SQLServerPersister(MutableMapping):
     def __check_dependencies():
         import pkg_resources
 
-        installed_packages = [
-            pkg.project_name for pkg in pkg_resources.working_set
-        ]
+        installed_packages = [pkg.project_name for pkg in pkg_resources.working_set]
         if "pyodbc" not in installed_packages:
             raise ModuleNotFoundError(
                 "'SQLServerPersister' depends on the module 'pyodbc' which is not installed. "
@@ -84,17 +86,12 @@ class SQLServerPersister(MutableMapping):
     def __getitem__(self, k):
         self._cursor.execute(self._select_query.format(value=k))
         record = self._cursor.fetchone()
-        return (
-            record
-            if record
-            else print(f"No record found for primary_key: {k}")
-        )
+        return record if record else print(f"No record found for primary_key: {k}")
         # TODO: Raise a proper exception here
 
     def __setitem__(self, k, v):
         _sanitized_values = [
-            str(val) if isinstance(val, int) else f"'{val}'"
-            for val in v.values()
+            str(val) if isinstance(val, int) else f"'{val}'" for val in v.values()
         ]
         try:
             self._cursor.execute(
@@ -123,5 +120,3 @@ class SQLServerPersister(MutableMapping):
         self._cursor.execute(self._select_all_query)
         records = self._cursor.fetchall()
         return len(records)
-
-

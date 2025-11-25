@@ -93,7 +93,24 @@ lint = []
 format = []
 
 [tool.wads.ci.env]
-required = []
+required = [
+    "unixodbc",
+    "msodbcsql18"
+]
+
+[tool.wads.ci.env.install]
+# System dependencies installation commands for CI environments
+linux = [
+    "sudo apt-get update",
+    "sudo apt-get install -y unixodbc unixodbc-dev",
+    "curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -",
+    "curl https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list",
+    "sudo apt-get update",
+    "sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18"
+]
+macos = [
+    "brew install unixodbc"
+]
 
 [tool.wads.ci.env.defaults]
 

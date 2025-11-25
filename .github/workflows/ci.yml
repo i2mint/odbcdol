@@ -1,4 +1,4 @@
-name: Continuous Integration (Dynamic)
+name: Continuous Integration (2025-11)
 on: [push, pull_request]
 
 jobs:
