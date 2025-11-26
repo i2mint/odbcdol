@@ -43,6 +43,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install System Dependencies
+        uses: i2mint/wads/actions/install-system-deps@master
+        with:
+          pyproject-path: .
+
       - name: Install Dependencies
         uses: i2mint/wads/actions/install-deps@master
         with:

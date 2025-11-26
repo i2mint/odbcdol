@@ -82,6 +82,45 @@ doctest_optionflags = [
     "ELLIPSIS",
 ]
 
+# ============================================================================
+# WADS EXTERNAL OPERATIONS
+# ============================================================================
+
+[tool.wads.ops.unixodbc]
+canonical_id = "dep:generic/unixodbc"
+rationale = "ODBC driver interface for database connectivity"
+url = "https://www.unixodbc.org/"
+
+check.linux = [["dpkg", "-s", "unixodbc"], ["rpm", "-q", "unixODBC"]]
+check.macos = ["brew", "list", "unixodbc"]
+
+install.linux = [
+    "sudo apt-get update",
+    "sudo apt-get install -y unixodbc unixodbc-dev"
+]
+install.macos = "brew install unixodbc"
+
+note = "On Alpine, use: apk add unixodbc unixodbc-dev"
+alternatives = ["iodbc"]
+
+[tool.wads.external.ops.msodbcsql18]
+canonical_id = "dep:generic/msodbcsql18"
+rationale = "Microsoft ODBC Driver 18 for SQL Server"
+url = "https://docs.microsoft.com/sql/connect/odbc/"
+
+install.linux = [
+    "curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -",
+    "curl https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list",
+    "sudo apt-get update",
+    "sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18"
+]
+
+note = "Requires accepting Microsoft EULA"
+
+# ============================================================================
+# CI Configuration
+# ============================================================================
+
 [tool.wads.ci]
 project_name = ""
 
