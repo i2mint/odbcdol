@@ -1,0 +1,32 @@
+{
+  "collection_duration_seconds": null,
+  "commit_message": null,
+  "commit_sha": "26a381140d20ccf873fe9473637ae060727f9435",
+  "metrics": {
+    "coverage": {
+      "branch_coverage": 0.0,
+      "error": "argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'Config'",
+      "line_coverage": 0.0,
+      "statements_covered": 0,
+      "statements_total": 0
+    },
+    "umpyre_stats": {
+      "comment_lines": 0,
+      "comment_lines_ratio": 0.0,
+      "docs_lines": 0,
+      "empty_lines": 0,
+      "empty_lines_ratio": 0.0,
+      "error": "'Config' object has no attribute 'endswith'",
+      "function_lines": 0,
+      "function_lines_ratio": 0.0,
+      "mean_lines_per_function": 0.0,
+      "num_classes": 0,
+      "num_functions": 0,
+      "total_lines": 0
+    }
+  },
+  "python_version": null,
+  "schema_version": "1.0",
+  "timestamp": "2025-11-14T20:37:33.502900Z",
+  "workflow_status": {}
+}

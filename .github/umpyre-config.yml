@@ -1,0 +1,36 @@
+schema_version: "1.0"
+
+collectors:
+  workflow_status:
+    enabled: true
+    lookback_runs: 10
+  
+  wily:
+    enabled: true
+    max_revisions: 5
+    operators: [cyclomatic, maintainability]
+  
+  coverage:
+    enabled: true
+    source: pytest-cov
+  
+  umpyre_stats:
+    enabled: true
+    exclude_dirs: [tests, examples, scrap]
+
+storage:
+  branch: code-metrics
+  formats: [json, csv]
+  retention:
+    strategy: all
+
+visualization:
+  generate_plots: true
+  generate_readme: true
+  plot_metrics: [maintainability, coverage, loc]
+
+thresholds:
+  enabled: false
+
+aggregation:
+  enabled: false

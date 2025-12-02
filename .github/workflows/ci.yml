@@ -1,58 +1,34 @@
-name: Continuous Integration (2025-11)
+name: Continuous Integration (Modern)
 on: [push, pull_request]
 
-jobs:
-  # First job: Read configuration from pyproject.toml
-  setup:
-    name: Read Configuration
-    runs-on: ubuntu-latest
-    outputs:
-      project-name: ${{ steps.config.outputs.project-name }}
-      python-versions: ${{ steps.config.outputs.python-versions }}
-      pytest-args: ${{ steps.config.outputs.pytest-args }}
-      coverage-enabled: ${{ steps.config.outputs.coverage-enabled }}
-      exclude-paths: ${{ steps.config.outputs.exclude-paths }}
-      test-on-windows: ${{ steps.config.outputs.test-on-windows }}
-      build-sdist: ${{ steps.config.outputs.build-sdist }}
-      build-wheel: ${{ steps.config.outputs.build-wheel }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Read CI Config
-        id: config
-        uses: i2mint/wads/actions/read-ci-config@master
-        with:
-          pyproject-path: .
+env:
+  PROJECT_NAME: odbcdol
 
-  # Second job: Validation using the config
+jobs:
   validation:
     name: Validation
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    needs: setup
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ${{ fromJson(needs.setup.outputs.python-versions) }}
+        python-version: ["3.10", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install System Dependencies
-        uses: i2mint/wads/actions/install-system-deps@master
-        with:
-          pyproject-path: .
 
       - name: Install Dependencies
         uses: i2mint/wads/actions/install-deps@master
         with:
           dependency-files: pyproject.toml
           extras: dev,test
+          # Fallback for projects still using setup.cfg:
+          # dependency-files: setup.cfg
+          # ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}  # Uncomment for private dependencies
 
       - name: Format Source Code
         uses: i2mint/wads/actions/ruff-format@master
@@ -63,32 +39,31 @@ jobs:
       - name: Lint Validation
         uses: i2mint/wads/actions/ruff-lint@master
         with:
-          root-dir: ${{ needs.setup.outputs.project-name }}
+          root-dir: ${{ env.PROJECT_NAME }}
           output-format: github
+          # Ruff will read configuration from pyproject.toml
 
       - name: Run Tests
         uses: i2mint/wads/actions/run-tests@master
         with:
-          root-dir: ${{ needs.setup.outputs.project-name }}
-          exclude: ${{ needs.setup.outputs.exclude-paths }}
-          coverage: ${{ needs.setup.outputs.coverage-enabled }}
-          pytest-args: ${{ needs.setup.outputs.pytest-args }}
+          root-dir: ${{ env.PROJECT_NAME }}
+          exclude: examples,scrap
+          coverage: true
+          pytest-args: -v --tb=short
 
-  # Optional Windows testing (if enabled in config)
   windows-validation:
-    name: Windows Tests
-    if: "!contains(github.event.head_commit.message, '[skip ci]') && needs.setup.outputs.test-on-windows == 'true'"
-    needs: setup
+    name: Windows Tests (Informational)
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: windows-latest
-    continue-on-error: true
+    continue-on-error: true  # Don't fail the entire workflow if Windows tests fail
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ fromJson(needs.setup.outputs.python-versions)[0] }}
+          python-version: "3.10"
 
       - name: Install Dependencies
         uses: i2mint/wads/actions/install-deps@master
@@ -96,28 +71,21 @@ jobs:
           dependency-files: pyproject.toml
           extras: dev,test
 
-      - name: Run tests
-        id: test
-        continue-on-error: true
-        run: pytest
+      - name: Run Windows Tests
+        uses: i2mint/wads/actions/windows-tests@master
+        with:
+          root-dir: ${{ env.PROJECT_NAME }}
+          exclude: examples,scrap
+          pytest-args: -v --tb=short
 
-      - name: Report test results
-        if: always()
-        run: |
-          if ("${{ steps.test.outcome }}" -eq "failure") {
-            echo "::warning::Windows tests failed but workflow continues"
-            echo "## ⚠️ Windows Tests Failed" >> $env:GITHUB_STEP_SUMMARY
-            echo "Tests failed on Windows but this is informational only." >> $env:GITHUB_STEP_SUMMARY
-          } else {
-            echo "## ✅ Windows Tests Passed" >> $env:GITHUB_STEP_SUMMARY
-          }
-
-  # Publishing job
   publish:
     name: Publish
     if: "!contains(github.event.head_commit.message, '[skip ci]') && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')"
-    needs: [setup, validation]
+    needs: validation
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -125,23 +93,25 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ fromJson(needs.setup.outputs.python-versions)[0] }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Format Source Code
         uses: i2mint/wads/actions/ruff-format@master
 
       - name: Update Version Number
-        id: version
         uses: i2mint/isee/actions/bump-version-number@master
 
       - name: Build Distribution
         uses: i2mint/wads/actions/build-dist@master
         with:
-          sdist: ${{ needs.setup.outputs.build-sdist }}
-          wheel: ${{ needs.setup.outputs.build-wheel }}
+          sdist: true
+          wheel: true
+        # Uncomment for private dependencies:
+        # with:
+        #   ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Publish to PyPI
         uses: i2mint/wads/actions/pypi-upload@master
@@ -150,33 +120,28 @@ jobs:
           pypi-password: ${{ secrets.PYPI_PASSWORD }}
           skip-existing: false
 
-      - name: Track Code Metrics
-        uses: i2mint/umpyre/actions/track-metrics@master
-        continue-on-error: true
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Commit Changes
         uses: i2mint/wads/actions/git-commit@master
         with:
-          commit-message: "**CI** Formatted code + Updated version to ${{ env.VERSION }} [skip ci]"
+          commit-message: "**CI** Formatted code + Updated version to ${{ steps.version.outputs.version }} [skip ci]"
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           push: true
 
       - name: Tag Repository
         uses: i2mint/wads/actions/git-tag@master
         with:
-          tag: ${{ env.VERSION }}
-          message: "Release version ${{ env.VERSION }}"
+          tag: ${{ steps.version.outputs.version }}
+          message: "Release version ${{ steps.version.outputs.version }}"
           push: true
 
-  # Optional GitHub Pages
   github-pages:
     name: Publish GitHub Pages
+
     permissions:
       contents: write
       pages: write
       id-token: write
+
     if: "!contains(github.event.head_commit.message, '[skip ci]') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
     needs: publish
     runs-on: ubuntu-latest

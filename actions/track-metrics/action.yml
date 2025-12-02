@@ -1,0 +1,74 @@
+name: Track Code Metrics
+description: Collect and store code quality metrics for CI/CD pipelines
+
+inputs:
+  config-path:
+    description: 'Path to umpyre config file'
+    default: '.github/umpyre-config.yml'
+    required: false
+  
+  storage-branch:
+    description: 'Branch to store metrics'
+    default: 'code-metrics'
+    required: false
+  
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  
+  force-run:
+    description: 'Run even if workflow failed'
+    default: 'false'
+    required: false
+  
+  python-version:
+    description: 'Python version to use'
+    default: '3.10'
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    
+    - name: Install umpyre and dependencies
+      shell: bash
+      run: |
+        pip install umpyre coverage wily bandit interrogate
+    
+    - name: Collect and Store Metrics
+      shell: bash
+      run: |
+        echo "::group::Collecting Code Metrics"
+        
+        # Set up error handling - continue even if collection fails
+        set +e
+        
+        # Run umpyre collect
+        if [ -f "${{ inputs.config-path }}" ]; then
+          python -m umpyre.cli collect --config "${{ inputs.config-path }}"
+          EXIT_CODE=$?
+        else
+          python -m umpyre.cli collect
+          EXIT_CODE=$?
+        fi
+        
+        # Report status but don't fail
+        if [ $EXIT_CODE -eq 0 ]; then
+          echo "✅ Metrics collection completed successfully"
+        else
+          echo "⚠️ Metrics collection failed with exit code $EXIT_CODE"
+          echo "This is informational only - CI pipeline continues"
+        fi
+        
+        echo "::endgroup::"
+        
+        # Always exit successfully to not break CI
+        exit 0
+
+branding:
+  icon: 'bar-chart-2'
+  color: 'blue'
