@@ -126,13 +126,13 @@ ignore = [
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = [
+"**/tests/*" = [
     "D",
 ]
-"examples/*" = [
+"**/examples/*" = [
     "D",
 ]
-"scrap/*" = [
+"**/scrap/*" = [
     "D",
 ]
 
