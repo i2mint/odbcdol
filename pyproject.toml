@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 keywords = []
 authors = []
-dependencies = ["dol", "pyodbc"]
+dependencies = ["dol", "pyodbc", "pandas"]
 
 [project.license]
 text = "Apache-2.0"
