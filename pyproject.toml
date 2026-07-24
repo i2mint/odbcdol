@@ -8,12 +8,19 @@ version = "0.0.3"
 description = "odbc (through pyodbc) with a simple (dict-like or list-like) interface"
 readme = "README.md"
 requires-python = ">=3.10"
-keywords = []
+keywords = ["odbc", "pyodbc", "sql-server", "database", "dol", "storage", "key-value"]
 authors = []
-dependencies = ["dol", "pyodbc", "pandas"]
-
-[project.license]
-text = "Apache-2.0"
+license = "Apache-2.0"
+dependencies = ["dol", "pyodbc"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Database",
+]
 
 [project.urls]
 Homepage = "https://github.com/i2mint/odbcdol"
@@ -50,7 +57,7 @@ convention = "google"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = ["tests"]
+testpaths = ["odbcdol"]
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 
 # ============================================================================
