@@ -85,5 +85,4 @@ print("=========================")
 
 print("Getting the length")
 print(len(sql_server_persister))
-
 ```

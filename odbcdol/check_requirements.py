@@ -38,7 +38,7 @@ def _check_homebrew_package(package_name):
     """
     try:
         result = subprocess.run(
-            ['brew', 'list', package_name],
+            ["brew", "list", package_name],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=5,
@@ -59,7 +59,7 @@ def _check_dpkg_package(package_name):
     """
     try:
         result = subprocess.run(
-            ['dpkg', '-s', package_name],
+            ["dpkg", "-s", package_name],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=5,
@@ -80,7 +80,7 @@ def _check_rpm_package(package_name):
     """
     try:
         result = subprocess.run(
-            ['rpm', '-q', package_name],
+            ["rpm", "-q", package_name],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=5,
@@ -117,15 +117,15 @@ def check_system_dependencies():
     """
     system, platform_info = _get_system_info()
 
-    if system == 'darwin':  # macOS
+    if system == "darwin":  # macOS
         # Check for unixodbc via Homebrew
         lib_paths = [
-            '/opt/homebrew/opt/unixodbc/lib/libodbc.2.dylib',  # Apple Silicon
-            '/usr/local/opt/unixodbc/lib/libodbc.2.dylib',  # Intel Mac
+            "/opt/homebrew/opt/unixodbc/lib/libodbc.2.dylib",  # Apple Silicon
+            "/usr/local/opt/unixodbc/lib/libodbc.2.dylib",  # Intel Mac
         ]
 
         if not _check_odbc_library_exists(lib_paths) and not _check_homebrew_package(
-            'unixodbc'
+            "unixodbc"
         ):
             raise ImportError(
                 "\n" + "=" * 70 + "\n"
@@ -144,26 +144,26 @@ def check_system_dependencies():
                 "=" * 70
             )
 
-    elif system == 'linux':
+    elif system == "linux":
         # Check for appropriate ODBC drivers on Linux
-        is_ubuntu = 'ubuntu' in platform_info or 'debian' in platform_info
+        is_ubuntu = "ubuntu" in platform_info or "debian" in platform_info
         is_rhel = any(
-            x in platform_info for x in ['rhel', 'centos', 'fedora', 'red hat']
+            x in platform_info for x in ["rhel", "centos", "fedora", "red hat"]
         )
 
         if is_ubuntu:
             # Check for unixodbc and MS ODBC driver
-            has_unixodbc = _check_dpkg_package('unixodbc')
-            has_ms_driver = _check_dpkg_package('msodbcsql17') or _check_dpkg_package(
-                'msodbcsql18'
+            has_unixodbc = _check_dpkg_package("unixodbc")
+            has_ms_driver = _check_dpkg_package("msodbcsql17") or _check_dpkg_package(
+                "msodbcsql18"
             )
 
             if not has_unixodbc or not has_ms_driver:
                 missing = []
                 if not has_unixodbc:
-                    missing.append('unixodbc')
+                    missing.append("unixodbc")
                 if not has_ms_driver:
-                    missing.append('msodbcsql17/msodbcsql18')
+                    missing.append("msodbcsql17/msodbcsql18")
 
                 raise ImportError(
                     "\n" + "=" * 70 + "\n"
@@ -189,17 +189,17 @@ def check_system_dependencies():
                 )
 
         elif is_rhel:
-            has_unixodbc = _check_rpm_package('unixODBC')
-            has_ms_driver = _check_rpm_package('msodbcsql17') or _check_rpm_package(
-                'msodbcsql18'
+            has_unixodbc = _check_rpm_package("unixODBC")
+            has_ms_driver = _check_rpm_package("msodbcsql17") or _check_rpm_package(
+                "msodbcsql18"
             )
 
             if not has_unixodbc or not has_ms_driver:
                 missing = []
                 if not has_unixodbc:
-                    missing.append('unixODBC')
+                    missing.append("unixODBC")
                 if not has_ms_driver:
-                    missing.append('msodbcsql17/msodbcsql18')
+                    missing.append("msodbcsql17/msodbcsql18")
 
                 raise ImportError(
                     "\n" + "=" * 70 + "\n"
@@ -221,7 +221,7 @@ def check_system_dependencies():
                     "=" * 70
                 )
 
-    elif system == 'windows':
+    elif system == "windows":
         # On Windows, ODBC drivers are usually pre-installed or available via Windows Update
         # We'll provide guidance if pyodbc fails to import
         pass
@@ -255,7 +255,7 @@ def check_pyodbc_import():
         return pyodbc
     except ImportError as e:
         # If pyodbc itself is not installed
-        if 'pyodbc' in str(e).lower():
+        if "pyodbc" in str(e).lower():
             raise ImportError(
                 "\n" + "=" * 70 + "\n"
                 "❌ MISSING PYTHON PACKAGE: pyodbc\n"
