@@ -1,0 +1,4 @@
+odbcdol.check_requirements
+==========================
+.. automodule:: odbcdol.check_requirements
+   :members:

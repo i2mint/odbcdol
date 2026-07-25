@@ -1,0 +1,4 @@
+odbcdol.tests.test_simple
+=========================
+.. automodule:: odbcdol.tests.test_simple
+   :members:
