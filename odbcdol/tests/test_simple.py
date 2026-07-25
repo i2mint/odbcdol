@@ -1,8 +1,24 @@
+"""Smoke test for ``SQLServerPersister``.
+
+Requires a live SQL Server reachable with the default connection parameters;
+when none is available (e.g. CI without a database service, or a dev machine),
+the test skips instead of failing.
+"""
+
+import pytest
+
 from odbcdol import SQLServerPersister
 
 
+def _persister_or_skip():
+    try:
+        return SQLServerPersister()
+    except Exception as e:  # no live SQL Server available
+        pytest.skip(f"live SQL Server not available: {e}")
+
+
 def test_sqlserver_persister():
-    sql_server_persister = SQLServerPersister()
+    sql_server_persister = _persister_or_skip()
 
     print("Fetching a Record")
     print(sql_server_persister[1])
