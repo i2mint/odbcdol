@@ -3,6 +3,7 @@ odbc (through pyodbc) with a simple (dict-like or list-like) interface
 """
 
 import platform
+import re
 import subprocess
 from collections.abc import MutableMapping
 
@@ -10,6 +11,65 @@ from collections.abc import MutableMapping
 from odbcdol.check_requirements import check_pyodbc_import
 
 pyodbc = check_pyodbc_import()
+
+
+_MAX_IDENTIFIER_LEN = 128
+
+
+def _quote_identifier(name: str) -> str:
+    """Return *name* as a bracket-quoted SQL Server identifier.
+
+    Identifiers cannot be passed as query parameters, so they are delimited:
+    ``]`` is doubled, which makes any character sequence a single identifier.
+    A name the caller already bracketed (``[first name]``) is unwrapped first.
+    Empty names, names over 128 characters and control characters are refused.
+    """
+    if not isinstance(name, str):
+        raise ValueError(f"Not a valid SQL identifier: {name!r}")
+    if len(name) > 2 and name.startswith("[") and name.endswith("]"):
+        name = name[1:-1].replace("]]", "]")
+    if (
+        not name
+        or len(name) > _MAX_IDENTIFIER_LEN
+        or any(ord(c) < 0x20 or ord(c) == 0x7F for c in name)
+    ):
+        raise ValueError(f"Not a valid SQL identifier: {name!r}")
+    return "[" + name.replace("]", "]]") + "]"
+
+
+def _quote_table_name(name: str) -> str:
+    """Quote a possibly schema-qualified table name (``dbo.person``), part by part."""
+    if not isinstance(name, str):
+        raise ValueError(f"Not a valid SQL table name: {name!r}")
+    parts = name.split(".")
+    if not 1 <= len(parts) <= 4:
+        raise ValueError(f"Not a valid SQL table name: {name!r}")
+    return ".".join(_quote_identifier(p) for p in parts)
+
+
+_SCALAR_TYPES = (str, int, float, bool, bytes, bytearray, type(None))
+
+
+def _bindable(value):
+    """A value pyodbc can bind as one parameter.
+
+    Scalars (and dates, decimals...) pass through; containers are stored as
+    their ``str()``, as before. (A lone list/tuple would otherwise be read by
+    pyodbc as the whole parameter list.)
+    """
+    if isinstance(value, (list, tuple, dict, set, frozenset)):
+        return str(value)
+    return value
+
+
+def _connection_string(**parts) -> str:
+    """Build an ODBC connection string with every value brace-quoted.
+
+    Braced values may contain ``;`` and ``=`` (``}`` is doubled), so no value
+    -- a password such as ``x};Encrypt=no;APP={y`` included -- can end its
+    attribute and start another.
+    """
+    return ";".join(f"{k}={{{str(v).replace('}', '}}')}}}" for k, v in parts.items())
 
 
 class SQLServerPersister(MutableMapping):
@@ -28,31 +88,28 @@ class SQLServerPersister(MutableMapping):
 
         self.__check_dependencies()
         self._sql_server_client = pyodbc.connect(
-            "DRIVER={{ODBC Driver 17 for SQL Server}};"
-            "SERVER={}:{},{};"
-            "DATABASE={};"
-            "UID={};"
-            "PWD={}".format(conn_protocol, host, port, db_name, db_username, db_pass)
+            _connection_string(
+                DRIVER="ODBC Driver 17 for SQL Server",
+                SERVER=f"{conn_protocol}:{host},{port}",
+                DATABASE=db_name,
+                UID=db_username,
+                PWD=db_pass,
+            )
         )
 
         self._cursor = self._sql_server_client.cursor()
         self._table_name = table_name
         self._primary_key = primary_key
 
-        self._select_all_query = "SELECT * from {table};".format(table=self._table_name)
-        self._insert_query = (
-            "INSERT into {table}({{attributes}}) VALUES ({{values}});".format(
-                table=self._table_name
-            )
-        )
-        self._select_query = (
-            "SELECT * from {table} where {primary_key}='{{value}}'".format(
-                table=self._table_name, primary_key=self._primary_key
-            )
-        )
-        self._del_query = "DELETE from {table} where {primary_key} = {{value}};".format(
-            table=self._table_name, primary_key=self._primary_key
-        )
+        # Identifiers cannot be bound as parameters, so they are bracket-quoted
+        # (which also keeps braces out of the templates below: the insert
+        # template is .format-ted later); every VALUE is bound (``?``).
+        table = _quote_table_name(self._table_name)
+        pk = _quote_identifier(self._primary_key)
+        self._select_all_query = f"SELECT * FROM {table};"
+        self._insert_query = f"INSERT INTO {table}({{attributes}}) VALUES ({{values}});"
+        self._select_query = f"SELECT * FROM {table} WHERE {pk} = ?;"
+        self._del_query = f"DELETE FROM {table} WHERE {pk} = ?;"
 
     @staticmethod
     def __check_dependencies():
@@ -82,21 +139,20 @@ class SQLServerPersister(MutableMapping):
                 )
 
     def __getitem__(self, k):
-        self._cursor.execute(self._select_query.format(value=k))
+        self._cursor.execute(self._select_query, (_bindable(k),))
         record = self._cursor.fetchone()
         return record if record else print(f"No record found for primary_key: {k}")
         # TODO: Raise a proper exception here
 
     def __setitem__(self, k, v):
-        _sanitized_values = [
-            str(val) if isinstance(val, int) else f"'{val}'" for val in v.values()
-        ]
+        columns = list(v.keys())
         try:
             self._cursor.execute(
                 self._insert_query.format(
-                    attributes=",".join(v.keys()),
-                    values=",".join(_sanitized_values),
-                )
+                    attributes=",".join(_quote_identifier(c) for c in columns),
+                    values=",".join("?" for _ in columns),
+                ),
+                tuple(_bindable(v[c]) for c in columns),
             )
         except pyodbc.IntegrityError as e:
             # TODO: Raise a proper exception here
@@ -105,7 +161,7 @@ class SQLServerPersister(MutableMapping):
         self._sql_server_client.commit()
 
     def __delitem__(self, k):
-        self._cursor.execute(self._del_query.format(value=k))
+        self._cursor.execute(self._del_query, (_bindable(k),))
         self._sql_server_client.commit()
 
     def __iter__(self):
