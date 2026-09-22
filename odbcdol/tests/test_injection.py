@@ -13,8 +13,8 @@ class _Cursor:
     def __init__(self, log):
         self.log = log
 
-    def execute(self, sql, *params):
-        self.log.append((sql, params))
+    def execute(self, sql, params=()):
+        self.log.append((sql, tuple(params)))
 
     def fetchone(self):
         return ("row",)
@@ -79,26 +79,70 @@ def test_values_are_bound_on_write(persister_cls, value):
     assert params == ("3", value)
 
 
-@pytest.mark.parametrize("column", ["name) VALUES (1); --", "a b", "x]", ""])
-def test_hostile_column_names_are_refused(persister_cls, column):
+@pytest.mark.parametrize(
+    "column, quoted",
+    [
+        ("name) VALUES (1); --", "[name) VALUES (1); --]"),
+        ("x]; DROP TABLE t; --", "[x]]; DROP TABLE t; --]"),
+        ("first name", "[first name]"),
+        ("[first name]", "[first name]"),
+    ],
+)
+def test_column_names_are_always_one_identifier(persister_cls, column, quoted):
+    cls, log = persister_cls
+    cls()["3"] = {column: "v"}
+    sql, params = log[-1]
+    assert sql == f"INSERT INTO [person]({quoted}) VALUES (?);"
+    assert params == ("v",)
+
+
+@pytest.mark.parametrize("column", ["", "a\x00b", "x" * 129, 3])
+def test_invalid_column_names_are_refused(persister_cls, column):
     cls, _ = persister_cls
     with pytest.raises(ValueError):
         cls()["3"] = {column: "v"}
 
 
 @pytest.mark.parametrize(
-    "kw", [{"table_name": "person; DROP TABLE x"}, {"primary_key": "id = id OR 1"}]
+    "table, quoted",
+    [
+        ("person", "[person]"),
+        ("dbo.person", "[dbo].[person]"),
+        ("[dbo].[person]", "[dbo].[person]"),
+        ("person]; DROP TABLE x; --", "[person]]; DROP TABLE x; --]"),
+    ],
 )
-def test_hostile_identifiers_are_refused_at_construction(persister_cls, kw):
-    cls, _ = persister_cls
-    with pytest.raises(ValueError):
-        cls(**kw)
-
-
-def test_connection_string_values_cannot_add_attributes(persister_cls):
+def test_table_names_quote_part_by_part(persister_cls, table, quoted):
     cls, log = persister_cls
-    s = cls(db_pass="pw;DATABASE=master", db_name="db")
+    s = cls(table_name=table)
+    s["k"]
+    assert log[-1][0] == f"SELECT * FROM {quoted} WHERE [id] = ?;"
+
+
+@pytest.mark.parametrize("key", [(1, 2), [1], {"a": 1}])
+def test_container_keys_bind_as_one_value(persister_cls, key):
+    cls, log = persister_cls
+    cls()[key]
+    assert log[-1][1] == (str(key),)
+
+
+@pytest.mark.parametrize(
+    "password, quoted",
+    [
+        ("pw;DATABASE=master", "PWD={pw;DATABASE=master}"),
+        ("{x};Encrypt=no;APP={y}", "PWD={{x}};Encrypt=no;APP={y}}}"),
+        ("{literalbraces}", "PWD={{literalbraces}}}"),
+    ],
+)
+def test_connection_string_values_cannot_add_attributes(
+    persister_cls, password, quoted
+):
+    cls, _ = persister_cls
+    s = cls(db_pass=password, db_name="db")
     conn_str = s._sql_server_client.conn_str
-    assert "PWD={pw;DATABASE=master}" in conn_str
-    assert "DATABASE=db;" in conn_str
+    assert conn_str.endswith(quoted)
+    assert "DATABASE={db};" in conn_str
     assert conn_str.startswith("DRIVER={ODBC Driver 17 for SQL Server};")
+    assert conn_str.count("Encrypt=no") <= 1 and ";Encrypt=no;" not in conn_str.replace(
+        quoted, ""
+    )

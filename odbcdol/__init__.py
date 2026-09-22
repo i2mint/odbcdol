@@ -13,37 +13,63 @@ from odbcdol.check_requirements import check_pyodbc_import
 pyodbc = check_pyodbc_import()
 
 
-_IDENTIFIER_RE = re.compile(r"[A-Za-z_@#][A-Za-z0-9_@#$]{0,127}")
+_MAX_IDENTIFIER_LEN = 128
 
 
 def _quote_identifier(name: str) -> str:
-    """Validate a table/column name and return it bracket-quoted for SQL Server.
+    """Return *name* as a bracket-quoted SQL Server identifier.
 
-    Identifiers cannot be passed as query parameters, so anything that is not a
-    plain (regular) SQL Server identifier is refused rather than escaped.
+    Identifiers cannot be passed as query parameters, so they are delimited:
+    ``]`` is doubled, which makes any character sequence a single identifier.
+    A name the caller already bracketed (``[first name]``) is unwrapped first.
+    Empty names, names over 128 characters and control characters are refused.
     """
-    if not isinstance(name, str) or not _IDENTIFIER_RE.fullmatch(name):
+    if not isinstance(name, str):
         raise ValueError(f"Not a valid SQL identifier: {name!r}")
-    return f"[{name}]"
+    if len(name) > 2 and name.startswith("[") and name.endswith("]"):
+        name = name[1:-1].replace("]]", "]")
+    if (
+        not name
+        or len(name) > _MAX_IDENTIFIER_LEN
+        or any(ord(c) < 0x20 or ord(c) == 0x7F for c in name)
+    ):
+        raise ValueError(f"Not a valid SQL identifier: {name!r}")
+    return "[" + name.replace("]", "]]") + "]"
+
+
+def _quote_table_name(name: str) -> str:
+    """Quote a possibly schema-qualified table name (``dbo.person``), part by part."""
+    if not isinstance(name, str):
+        raise ValueError(f"Not a valid SQL table name: {name!r}")
+    parts = name.split(".")
+    if not 1 <= len(parts) <= 4:
+        raise ValueError(f"Not a valid SQL table name: {name!r}")
+    return ".".join(_quote_identifier(p) for p in parts)
+
+
+_SCALAR_TYPES = (str, int, float, bool, bytes, bytearray, type(None))
+
+
+def _bindable(value):
+    """A value pyodbc can bind as one parameter.
+
+    Scalars (and dates, decimals...) pass through; containers are stored as
+    their ``str()``, as before. (A lone list/tuple would otherwise be read by
+    pyodbc as the whole parameter list.)
+    """
+    if isinstance(value, (list, tuple, dict, set, frozenset)):
+        return str(value)
+    return value
 
 
 def _connection_string(**parts) -> str:
-    """Build an ODBC connection string, brace-quoting values that need it.
+    """Build an ODBC connection string with every value brace-quoted.
 
-    A value containing ``;``, ``{``, ``}``, ``=`` or surrounding spaces would
-    otherwise end its attribute and start another (e.g. a password
-    ``x;DATABASE=other``). Values already wrapped in braces are kept as is.
+    Braced values may contain ``;`` and ``=`` (``}`` is doubled), so no value
+    -- a password such as ``x};Encrypt=no;APP={y`` included -- can end its
+    attribute and start another.
     """
-
-    def _value(v) -> str:
-        v = str(v)
-        if v.startswith("{") and v.endswith("}"):
-            return v
-        if any(c in v for c in ";{}=") or v != v.strip():
-            return "{" + v.replace("}", "}}") + "}"
-        return v
-
-    return ";".join(f"{k}={_value(v)}" for k, v in parts.items())
+    return ";".join(f"{k}={{{str(v).replace('}', '}}')}}}" for k, v in parts.items())
 
 
 class SQLServerPersister(MutableMapping):
@@ -63,7 +89,7 @@ class SQLServerPersister(MutableMapping):
         self.__check_dependencies()
         self._sql_server_client = pyodbc.connect(
             _connection_string(
-                DRIVER="{ODBC Driver 17 for SQL Server}",
+                DRIVER="ODBC Driver 17 for SQL Server",
                 SERVER=f"{conn_protocol}:{host},{port}",
                 DATABASE=db_name,
                 UID=db_username,
@@ -75,9 +101,10 @@ class SQLServerPersister(MutableMapping):
         self._table_name = table_name
         self._primary_key = primary_key
 
-        # Identifiers cannot be bound as parameters, so they are validated and
-        # bracket-quoted; every VALUE is bound (``?``) and never formatted in.
-        table = _quote_identifier(self._table_name)
+        # Identifiers cannot be bound as parameters, so they are bracket-quoted
+        # (which also keeps braces out of the templates below: the insert
+        # template is .format-ted later); every VALUE is bound (``?``).
+        table = _quote_table_name(self._table_name)
         pk = _quote_identifier(self._primary_key)
         self._select_all_query = f"SELECT * FROM {table};"
         self._insert_query = f"INSERT INTO {table}({{attributes}}) VALUES ({{values}});"
@@ -112,7 +139,7 @@ class SQLServerPersister(MutableMapping):
                 )
 
     def __getitem__(self, k):
-        self._cursor.execute(self._select_query, k)
+        self._cursor.execute(self._select_query, (_bindable(k),))
         record = self._cursor.fetchone()
         return record if record else print(f"No record found for primary_key: {k}")
         # TODO: Raise a proper exception here
@@ -125,7 +152,7 @@ class SQLServerPersister(MutableMapping):
                     attributes=",".join(_quote_identifier(c) for c in columns),
                     values=",".join("?" for _ in columns),
                 ),
-                *(v[c] for c in columns),
+                tuple(_bindable(v[c]) for c in columns),
             )
         except pyodbc.IntegrityError as e:
             # TODO: Raise a proper exception here
@@ -134,7 +161,7 @@ class SQLServerPersister(MutableMapping):
         self._sql_server_client.commit()
 
     def __delitem__(self, k):
-        self._cursor.execute(self._del_query, k)
+        self._cursor.execute(self._del_query, (_bindable(k),))
         self._sql_server_client.commit()
 
     def __iter__(self):
