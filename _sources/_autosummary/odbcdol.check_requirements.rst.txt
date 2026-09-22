@@ -1,0 +1,13 @@
+odbcdol.check\_requirements
+===========================
+
+.. automodule:: odbcdol.check_requirements
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      check_pyodbc_import
+      check_system_dependencies
+   

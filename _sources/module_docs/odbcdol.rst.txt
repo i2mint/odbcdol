@@ -1,4 +1,0 @@
-odbcdol
-=======
-.. automodule:: odbcdol
-   :members:

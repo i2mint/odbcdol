@@ -1,0 +1,19 @@
+﻿odbcdol
+=======
+
+.. automodule:: odbcdol
+
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      SQLServerPersister
+   
+.. rubric:: Modules
+
+.. autosummary::
+   :toctree:
+   :recursive:
+
+   check_requirements

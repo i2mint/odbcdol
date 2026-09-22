@@ -1,0 +1,13 @@
+# odbcdol
+
+> odbc (through pyodbc) with a simple (dict-like or list-like) interface
+
+
+## Pages in this subsection
+
+- [odbcdol](odbcdol.html.md): odbc (through pyodbc) with a simple (dict-like or list-like) interface
+- [odbcdol.check_requirements](odbcdol.check_requirements.html.md): System requirements checking and helpful error messages for odbcdol.
+
+## Optional
+
+- [Top-level llms.txt](../llms.txt): Complete documentation index.
